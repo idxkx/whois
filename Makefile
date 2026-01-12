@@ -69,7 +69,7 @@ status:
 	@echo "检查服务状态..."
 	@if pgrep -f "server/app.py" > /dev/null; then \
 		echo "服务运行中 - PID: $$(pgrep -f 'server/app.py')"; \
-		ps aux | grep "server/app.py" | grep -v grep; \
+		ps aux | grep "server/app.py" | grep -v grep || true; \
 	else \
 		echo "服务未运行"; \
 	fi
