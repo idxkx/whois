@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>域名批量查询</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f9fafb; }
+    header { background: #2563eb; color: white; padding: 16px 24px; }
+    main { padding: 24px; }
+    textarea { width: 100%; height: 200px; padding: 12px; border-radius: 6px; border: 1px solid #cbd5f5; }
+    button { padding: 10px 20px; margin-top: 12px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    button:disabled { background: #93c5fd; cursor: not-allowed; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
+    th { background: #e5e7eb; }
+    .error { color: #dc2626; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>域名批量查询</h1>
+  </header>
+  <main>
+    <p>粘贴候选名称（每行一个），点击“查询”即可查看是否已注册。</p>
+    <textarea id="domain-text" placeholder="例如：
+alpha
+beta
+whois-ai"></textarea>
+    <div>
+      <button id="submit-btn">查询</button>
+      <span class="error" id="error-msg"></span>
+    </div>
+    <table id="result-table" hidden>
+      <thead>
+        <tr>
+          <th>域名</th>
+          <th>后缀</th>
+          <th>是否已注册</th>
+          <th>查询时间</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </main>
+  <script>
+    const textarea = document.getElementById('domain-text');
+    const button = document.getElementById('submit-btn');
+    const table = document.getElementById('result-table');
+    const tbody = table.querySelector('tbody');
+    const errorMsg = document.getElementById('error-msg');
+
+    button.addEventListener('click', () => {
+      errorMsg.textContent = '';
+      table.hidden = true;
+      tbody.innerHTML = '';
+      const payload = { text: textarea.value };
+      if (!payload.text.trim()) {
+        errorMsg.textContent = '请输入至少一行文本';
+        return;
+      }
+      button.disabled = true;
+      fetch('/domain-query/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then(resp => resp.json().then(body => ({ status: resp.status, body })))
+        .then(({ status, body }) => {
+          if (status !== 200) {
+            errorMsg.textContent = body.error || '请求失败';
+            return;
+          }
+          if (!body.items || !body.items.length) {
+            errorMsg.textContent = '没有查询结果';
+            return;
+          }
+          body.items.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${item.domain}</td>
+              <td>${item.domain_suffix}</td>
+              <td>${item.is_registered ? '已注册' : '未注册'}</td>
+              <td>${item.query_time || '-'}</td>`;
+            tbody.appendChild(tr);
+          });
+          table.hidden = false;
+        })
+        .catch(err => {
+          errorMsg.textContent = '网络错误：' + err;
+        })
+        .finally(() => {
+          button.disabled = false;
+        });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Domain Query Swagger</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 0; }
+    header { background: #1f2937; color: white; padding: 12px 20px; }
+    main { display: flex; gap: 24px; padding: 20px; }
+    pre { background: #f3f4f6; padding: 12px; border-radius: 6px; overflow: auto; }
+    textarea { width: 100%; height: 160px; }
+    button { padding: 8px 16px; margin-top: 8px; }
+    .panel { flex: 1; min-width: 240px; }
+    .result { white-space: pre-wrap; background: #111827; color: #d1d5db; padding: 12px; border-radius: 6px; min-height: 120px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Domain Query Swagger Playground</h1>
+  </header>
+  <main>
+    <section class="panel">
+      <h2>OpenAPI</h2>
+      <pre id="spec">加载 swagger.json...</pre>
+    </section>
+    <section class="panel">
+      <h2>调用 POST /domain-query/batch</h2>
+      <label for="swagger-body">Body</label>
+      <textarea id="swagger-body">{
+  "text": "alpha\nbeta"
+}</textarea>
+      <button id="swagger-send">发送请求</button>
+      <h3>响应</h3>
+      <div id="swagger-response" class="result">待发送</div>
+    </section>
+  </main>
+  <script>
+    fetch('/swagger.json')
+      .then(resp => resp.json())
+      .then(data => {
+        document.getElementById('spec').textContent = JSON.stringify(data, null, 2);
+      })
+      .catch(err => {
+        document.getElementById('spec').textContent = '无法加载 swagger.json: ' + err;
+      });
+
+    document.getElementById('swagger-send').addEventListener('click', () => {
+      let bodyText = document.getElementById('swagger-body').value;
+      let payload;
+      try { payload = JSON.parse(bodyText); }
+      catch (err) {
+        document.getElementById('swagger-response').textContent = 'JSON 解析错误: ' + err;
+        return;
+      }
+      fetch('/domain-query/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then(resp => resp.text().then(text => ({ status: resp.status, body: text })))
+        .then(({ status, body }) => {
+          document.getElementById('swagger-response').textContent = '状态: ' + status + '\n' + body;
+        })
+        .catch(err => {
+          document.getElementById('swagger-response').textContent = '请求失败: ' + err;
+        });
+    });
+  </script>
+</body>
+</html>

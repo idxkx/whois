@@ -1,0 +1,7 @@
+﻿{
+  "suffixes": [
+    { "suffix": "com", "enabled": true },
+    { "suffix": "net", "enabled": false },
+    { "suffix": "io", "enabled": false }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Domain Query API",
+    "version": "1.0.0",
+    "description": "批量域名查询接口，允许通过文本或数组输入候选名称。"
+  },
+  "paths": {
+    "/domain-query/batch": {
+      "post": {
+        "summary": "批量 whois 查询",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "description": "多行文本，换行分隔域名片段"
+                  },
+                  "lines": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "字符串数组，每个元素一个域名片段"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "查询成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "domain": { "type": "string" },
+                          "domain_suffix": { "type": "string" },
+                          "is_registered": { "type": "boolean" },
+                          "query_time": { "type": "string", "nullable": true }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
