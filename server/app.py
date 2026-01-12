@@ -288,7 +288,20 @@ def run(host: str | None = None, port: int | None = None) -> None:
         port = int(env_port) if env_port else 8000
 
     server = create_server(host=host, port=port)
-    print(f"Domain query server running on http://{host}:{port}")
+
+    # 打印启动信息和访问地址
+    print("=" * 60)
+    print(f"Domain query server started successfully!")
+    print("=" * 60)
+    print(f"\nAccess URLs:")
+    print(f"  Web UI:      http://{host}:{port}/ui/domain-query")
+    print(f"  Swagger:     http://{host}:{port}/swagger")
+    print(f"  API Batch:   http://{host}:{port}/domain-query/batch")
+    print(f"  API Stream:  http://{host}:{port}/domain-query/batch-stream")
+    print(f"\nServer running on http://{host}:{port}")
+    print("Press Ctrl+C to stop\n")
+    print("=" * 60)
+
     with server:
         server.serve_forever()
 
