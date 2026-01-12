@@ -52,6 +52,8 @@ for item in results:
 1. 初始化 `.env`：在 PowerShell 中执行 `./scripts/init_env.ps1`（或 CMD 中执行 `powershell -ExecutionPolicy Bypass -File .\scripts\init_env.ps1`），也可手动复制 `.env.example` 到 `.env`。在文件中维护 `DOMAIN_QUERY_HOST`、`DOMAIN_QUERY_PORT` 以及可选的 `DOMAIN_QUERY_CONFIG`。
 2. 在项目根目录运行 `python server/app.py`。程序会读取 `.env` 和环境变量中的配置；亦可通过命令行参数覆盖，例如 `python server/app.py --port 8080`。
 3. 访问：
-   - `http://127.0.0.1:8000/ui/domain-query`：可视化表单，粘贴多行文本并查看查询结果。
-   - `http://127.0.0.1:8000/swagger`：Swagger Playground，可查看 `swagger.json` 并直接调用 `POST /domain-query/batch`。
-4. API 入口：`POST http://127.0.0.1:8000/domain-query/batch`，请求体同上。服务端响应结构与 `batch_query_from_text` 返回值一致。
+   - `http://127.0.0.1:8000/ui/domain-query`：实时查看逐条查询进度，未注册结果会进入侧边列表并可导出 txt。
+   - `http://127.0.0.1:8000/swagger`：Swagger Playground，可查看 `swagger.json` 并直接调用 `POST /domain-query/batch` 或了解流式接口 `/domain-query/batch-stream`。
+4. API 入口：
+   - `POST http://127.0.0.1:8000/domain-query/batch`：一次性返回全部结果。
+   - `POST http://127.0.0.1:8000/domain-query/batch-stream`：返回以换行分隔的 JSON 事件，可在浏览器中流式解析以获得实时状态。

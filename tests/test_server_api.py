@@ -53,6 +53,9 @@ class ServerApiTest(unittest.TestCase):
         finally:
             conn.close()
 
+    def _request_stream(self, body: dict | None = None):
+        return self._request("POST", "/domain-query/batch-stream", body)
+
     def test_batch_query_success(self):
         status, body = self._request("POST", "/domain-query/batch", {"text": "alpha"})
         self.assertEqual(status, 200)
@@ -66,6 +69,17 @@ class ServerApiTest(unittest.TestCase):
         self.assertEqual(status, 400)
         payload = json.loads(body)
         self.assertIn("无有效域名片段", payload["error"])
+
+    def test_batch_stream_returns_progress(self):
+        status, body = self._request_stream({"text": "alpha"})
+        self.assertEqual(status, 200)
+        lines = [json.loads(line) for line in body.decode("utf-8").strip().splitlines()]
+        self.assertEqual(lines[0]["type"], "start")
+        result_events = [line for line in lines if line.get("type") == "result"]
+        self.assertTrue(result_events)
+        self.assertEqual(result_events[0]["domain"], "alpha.com")
+        complete_events = [line for line in lines if line.get("type") == "complete"]
+        self.assertTrue(complete_events)
 
 
 if __name__ == "__main__":

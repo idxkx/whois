@@ -70,6 +70,42 @@
           }
         }
       }
+    },
+    "/domain-query/batch-stream": {
+      "post": {
+        "summary": "流式批量查询（返回实时进度）",
+        "description": "返回以换行分隔的 JSON，每个事件包含 type=start/result/complete/error，适合在浏览器中通过 fetch 流式解析。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": { "type": "string" },
+                  "lines": { "type": "array", "items": { "type": "string" } }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "流式进度，Content-Type 为 application/json; charset=utf-8，每行一个 JSON 事件。"
+          },
+          "400": {
+            "description": "请求无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "error": { "type": "string" } }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

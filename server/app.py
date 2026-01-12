@@ -10,7 +10,7 @@ import os
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, List
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
@@ -57,6 +57,8 @@ load_env_file()
 class DomainQueryHTTPRequestHandler(BaseHTTPRequestHandler):
     """处理批量查询 API 与静态页面。"""
 
+    protocol_version = "HTTP/1.1"
+
     def _send_json(self, status: HTTPStatus, payload: Dict[str, Any]) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -75,6 +77,25 @@ class DomainQueryHTTPRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def _parse_request_payload(self) -> Tuple[Any, Any]:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+
+        raw = self.rfile.read(length) if length else b""
+        if not raw:
+            raise DomainQueryError("请求体为空")
+
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except json.JSONDecodeError as exc:
+            raise DomainQueryError("请求体不是有效 JSON") from exc
+
+        text_field = payload.get("text", "")
+        lines_field = payload.get("lines", [])
+        return text_field, lines_field
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path in ("/", ""):
@@ -101,35 +122,26 @@ class DomainQueryHTTPRequestHandler(BaseHTTPRequestHandler):
         if self.path == "/domain-query/batch":
             self._handle_batch_query()
             return
+        if self.path == "/domain-query/batch-stream":
+            self._handle_batch_stream()
+            return
         self.send_error(HTTPStatus.NOT_FOUND, "未找到资源")
+
+    def _merge_text_inputs(self, text_field: Any, lines_field: Any) -> Any:
+        if text_field and isinstance(lines_field, list) and lines_field:
+            return list(lines_field) + [text_field]
+        if isinstance(lines_field, list) and lines_field:
+            return lines_field
+        return text_field
 
     def _handle_batch_query(self) -> None:
         try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
-            length = 0
-
-        raw = self.rfile.read(length) if length else b""
-        if not raw:
-            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "请求体为空"})
+            text_field, lines_field = self._parse_request_payload()
+        except DomainQueryError as exc:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
             return
 
-        try:
-            payload = json.loads(raw.decode("utf-8"))
-        except json.JSONDecodeError:
-            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "请求体不是有效 JSON"})
-            return
-
-        text_field = payload.get("text", "")
-        lines_field = payload.get("lines", [])
-
-        text_inputs: Any
-        if text_field and isinstance(lines_field, list) and lines_field:
-            text_inputs = list(lines_field) + [text_field]
-        elif isinstance(lines_field, list) and lines_field:
-            text_inputs = lines_field
-        else:
-            text_inputs = text_field
+        text_inputs = self._merge_text_inputs(text_field, lines_field)
 
         try:
             results = batch_query_from_text(
@@ -155,6 +167,85 @@ class DomainQueryHTTPRequestHandler(BaseHTTPRequestHandler):
             for item in results
         ]
         self._send_json(HTTPStatus.OK, {"items": response_items})
+
+    def _handle_batch_stream(self) -> None:
+        try:
+            text_field, lines_field = self._parse_request_payload()
+        except DomainQueryError as exc:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            return
+
+        text_inputs = self._merge_text_inputs(text_field, lines_field)
+        try:
+            combos = self._build_domain_combinations(text_inputs)
+        except DomainQueryError as exc:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            return
+
+        if not combos:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "无有效域名片段"})
+            return
+
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "close")
+        self.end_headers()
+
+        def write_chunk(obj: Dict[str, Any]) -> bool:
+            data = (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
+            try:
+                self.wfile.write(data)
+                self.wfile.flush()
+                return True
+            except BrokenPipeError:
+                return False
+
+        total = len(combos)
+        if not write_chunk({"type": "start", "total": total}):
+            return
+
+        completed = 0
+        unregistered: List[str] = []
+        for domain in combos:
+            try:
+                result = self.server.client.lookup(domain)  # type: ignore[attr-defined]
+            except DomainQueryError as exc:
+                write_chunk({"type": "error", "error": str(exc), "completed": completed, "total": total})
+                return
+
+            completed += 1
+            if not write_chunk(
+                {
+                    "type": "result",
+                    "domain": result.domain,
+                    "domain_suffix": result.domain_suffix,
+                    "is_registered": result.is_registered,
+                    "query_time": result.query_time,
+                    "completed": completed,
+                    "total": total,
+                }
+            ):
+                return
+
+            if not result.is_registered:
+                unregistered.append(result.domain)
+
+        write_chunk(
+            {"type": "complete", "total": total, "completed": completed, "unregistered": unregistered}
+        )
+        self.close_connection = True
+
+    def _build_domain_combinations(self, text_inputs: Any) -> List[str]:
+        from domain_query.line_query import parse_text_lines, load_suffixes, combine_domain
+
+        base_names = parse_text_lines(text_inputs)
+        suffixes = load_suffixes(self.server.config_path)  # type: ignore[attr-defined]
+        combos: List[str] = []
+        for base in base_names:
+            for suffix in suffixes:
+                combos.append(combine_domain(base, suffix))
+        return combos
 
 
 class DomainQueryHTTPServer(ThreadingHTTPServer):
